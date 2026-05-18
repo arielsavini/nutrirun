@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NutriRun — Hidratación y Nutrición</title>
+  <meta name="description" content="Calculá cuánto líquido, geles y electrolitos necesitás para tu próxima carrera o entrenamiento." />
+  <link rel="manifest" href="./manifest.json" />
+  <meta name="theme-color" content="#0a7c3e" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0d1117;
+      --surface:  #161b22;
+      --surface2: #1e252d;
+      --surface3: #252d38;
+      --border:   rgba(255,255,255,.08);
+      --accent:   #00c96b;
+      --accent2:  #00ff85;
+      --warn:     #f59e0b;
+      --danger:   #ef4444;
+      --text:     #e6edf3;
+      --muted:    #7d8590;
+      --radius:   14px;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100dvh;
+      overflow-x: hidden;
+    }
+
+    /* ── HEADER ── */
+    header {
+      background: linear-gradient(160deg, #0a1f12 0%, #0d1117 60%);
+      border-bottom: 1px solid var(--border);
+      padding: 28px 24px 24px;
+      text-align: center;
+      position: relative;
+    }
+    header::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse 60% 80% at 50% 0%, rgba(0,201,107,.12) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .header-icon { font-size: 44px; line-height: 1; margin-bottom: 8px; }
+    header h1 {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(36px, 8vw, 52px);
+      letter-spacing: 3px;
+      color: var(--accent2);
+      line-height: 1;
+    }
+    header p {
+      font-size: 13px;
+      color: var(--muted);
+      letter-spacing: 1px;
+      margin-top: 6px;
+      font-family: 'Space Mono', monospace;
+      text-transform: uppercase;
+    }
+
+    /* ── MAIN LAYOUT ── */
+    .container {
+      max-width: 680px;
+      margin: 0 auto;
+      padding: 24px 16px 40px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    /* ── CARDS ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+    }
+    .card-title {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 13px;
+      letter-spacing: 2px;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 16px;
+    }
+
+    /* ── DISTANCE SELECTOR ── */
+    .dist-pills {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+    .pill {
+      padding: 8px 18px;
+      border-radius: 99px;
+      border: 1.5px solid var(--border);
+      background: var(--surface2);
+      color: var(--muted);
+      font-family: 'Space Mono', monospace;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all .18s;
+      flex: 1;
+      min-width: 60px;
+      text-align: center;
+    }
+    .pill:hover { border-color: var(--accent); color: var(--accent); }
+    .pill.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #000;
+      font-weight: 700;
+    }
+    .custom-dist-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 8px;
+    }
+    .custom-dist-row label {
+      font-size: 12px;
+      color: var(--muted);
+      white-space: nowrap;
+      font-family: 'Space Mono', monospace;
+    }
+    .custom-dist-row input[type="number"] {
+      width: 80px;
+      padding: 7px 10px;
+      border-radius: 8px;
+      border: 1.5px solid var(--border);
+      background: var(--surface2);
+      color: var(--text);
+      font-size: 14px;
+      font-family: 'Space Mono', monospace;
+      outline: none;
+    }
+    .custom-dist-row input[type="number"]:focus { border-color: var(--accent); }
+
+    /* ── SLIDERS ── */
+    .slider-group { margin-bottom: 6px; }
+    .slider-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .slider-label {
+      font-size: 13px;
+      color: var(--muted);
+      font-family: 'Space Mono', monospace;
+    }
+    .slider-value {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 22px;
+      color: var(--accent2);
+      letter-spacing: 1px;
+    }
+    input[type="range"] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 6px;
+      border-radius: 99px;
+      background: var(--surface3);
+      outline: none;
+      cursor: pointer;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: var(--accent);
+      border: 3px solid #000;
+      box-shadow: 0 0 0 2px var(--accent);
+      cursor: pointer;
+      transition: transform .15s;
+    }
+    input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.2); }
+    .slider-ticks {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 4px;
+    }
+    .slider-ticks span {
+      font-size: 10px;
+      color: var(--muted);
+      font-family: 'Space Mono', monospace;
+    }
+
+    /* ── INTENSITY ── */
+    .intensity-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+    .btn-intensity {
+      padding: 10px 6px;
+      border-radius: 10px;
+      border: 1.5px solid var(--border);
+      background: var(--surface2);
+      color: var(--muted);
+      cursor: pointer;
+      text-align: center;
+      transition: all .18s;
+    }
+    .btn-intensity .int-icon { font-size: 20px; display: block; margin-bottom: 4px; }
+    .btn-intensity .int-label {
+      font-size: 11px;
+      font-family: 'Space Mono', monospace;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .btn-intensity .int-pace {
+      font-size: 10px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+    .btn-intensity:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-intensity.active {
+      background: rgba(0,201,107,.15);
+      border-color: var(--accent);
+      color: var(--accent2);
+    }
+    .btn-intensity.active .int-pace { color: var(--accent); }
+
+    /* ── RESULTS GRID ── */
+    .results-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .result-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      text-align: center;
+      transition: border-color .3s;
+    }
+    .result-card.highlight { border-color: rgba(0,201,107,.4); }
+    .result-icon { font-size: 28px; margin-bottom: 6px; }
+    .result-value {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 32px;
+      color: var(--accent2);
+      letter-spacing: 1px;
+      line-height: 1;
+    }
+    .result-unit {
+      font-size: 12px;
+      color: var(--muted);
+      font-family: 'Space Mono', monospace;
+      margin-top: 3px;
+    }
+    .result-label {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-top: 6px;
+      font-family: 'Space Mono', monospace;
+    }
+
+    /* ── HYDRATION PLAN ── */
+    .plan-title {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 15px;
+      letter-spacing: 2px;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+    .plan-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    .plan-table th {
+      text-align: left;
+      padding: 6px 8px;
+      font-family: 'Space Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 1px;
+      color: var(--muted);
+      text-transform: uppercase;
+      border-bottom: 1px solid var(--border);
+    }
+    .plan-table td {
+      padding: 10px 8px;
+      border-bottom: 1px solid rgba(255,255,255,.04);
+      vertical-align: middle;
+    }
+    .plan-table tr:last-child td { border-bottom: none; }
+    .plan-km {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 20px;
+      color: var(--accent2);
+      letter-spacing: 1px;
+    }
+    .plan-action { color: var(--text); }
+    .plan-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 99px;
+      font-size: 11px;
+      font-family: 'Space Mono', monospace;
+    }
+    .badge-water { background: rgba(59,130,246,.2); color: #93c5fd; }
+    .badge-gel   { background: rgba(234,179,8,.2); color: #fde047; }
+    .badge-salt  { background: rgba(239,68,68,.2); color: #fca5a5; }
+
+    /* ── ALERTS ── */
+    .alert {
+      padding: 12px 14px;
+      border-radius: 10px;
+      font-size: 13px;
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+    }
+    .alert-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+    .alert-warn { background: rgba(245,158,11,.1); border: 1px solid rgba(245,158,11,.3); color: #fde68a; }
+    .alert-danger { background: rgba(239,68,68,.1); border: 1px solid rgba(239,68,68,.3); color: #fca5a5; }
+    .alert-tip { background: rgba(0,201,107,.08); border: 1px solid rgba(0,201,107,.2); color: #6ee7b7; }
+    .alerts-list { display: flex; flex-direction: column; gap: 8px; }
+
+    /* ── FOOTER ── */
+    footer {
+      text-align: center;
+      padding: 20px 16px;
+      font-size: 11px;
+      color: var(--muted);
+      font-family: 'Space Mono', monospace;
+      border-top: 1px solid var(--border);
+    }
+    footer a { color: var(--accent); text-decoration: none; }
+
+    @media (max-width: 480px) {
+      .results-grid { grid-template-columns: 1fr 1fr; }
+      .result-value { font-size: 26px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-icon">💧</div>
+  <h1>NutriRun</h1>
+  <p>Calculadora de Hidratación y Nutrición</p>
+</header>
+
+<div class="container">
+
+  <!-- FORM -->
+  <div class="card">
+    <div class="card-title">🏃 Distancia</div>
+    <div class="dist-pills">
+      <div class="pill" data-km="5">5K</div>
+      <div class="pill active" data-km="10">10K</div>
+      <div class="pill" data-km="21">21K</div>
+      <div class="pill" data-km="42">42K</div>
+    </div>
+    <div class="custom-dist-row">
+      <label>Personalizado:</label>
+      <input type="number" id="customKm" min="1" max="250" placeholder="km" />
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🌡️ Temperatura estimada</div>
+    <div class="slider-group">
+      <div class="slider-header">
+        <span class="slider-label">Temperatura ambiente</span>
+        <span class="slider-value" id="tempVal">20°C</span>
+      </div>
+      <input type="range" id="tempSlider" min="5" max="45" value="20" step="1" />
+      <div class="slider-ticks">
+        <span>5°C ❄️</span>
+        <span>15°C</span>
+        <span>25°C ☀️</span>
+        <span>35°C</span>
+        <span>45°C 🔥</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">⚡ Intensidad</div>
+    <div class="intensity-row">
+      <div class="btn-intensity" data-int="suave">
+        <span class="int-icon">🚶</span>
+        <span class="int-label">Suave</span>
+        <div class="int-pace">~7:30 /km</div>
+      </div>
+      <div class="btn-intensity active" data-int="moderado">
+        <span class="int-icon">🏃</span>
+        <span class="int-label">Moderado</span>
+        <div class="int-pace">~5:30 /km</div>
+      </div>
+      <div class="btn-intensity" data-int="intenso">
+        <span class="int-icon">🔥</span>
+        <span class="int-label">Intenso</span>
+        <div class="int-pace">~4:30 /km</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">⚖️ Tu peso (opcional, mejora el cálculo)</div>
+    <div class="slider-group">
+      <div class="slider-header">
+        <span class="slider-label">Peso corporal</span>
+        <span class="slider-value" id="weightVal">70 kg</span>
+      </div>
+      <input type="range" id="weightSlider" min="40" max="120" value="70" step="1" />
+      <div class="slider-ticks">
+        <span>40 kg</span>
+        <span>60 kg</span>
+        <span>80 kg</span>
+        <span>100 kg</span>
+        <span>120 kg</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- RESULTS -->
+  <div id="resultsSection">
+    <div class="card-title" style="padding:0 0 12px">📊 Resultados para tu carrera</div>
+
+    <div class="results-grid" id="resultsGrid">
+      <div class="result-card highlight">
+        <div class="result-icon">⏱️</div>
+        <div class="result-value" id="resDuration">—</div>
+        <div class="result-unit" id="resDurationUnit">h min</div>
+        <div class="result-label">Duración estimada</div>
+      </div>
+      <div class="result-card highlight">
+        <div class="result-icon">💧</div>
+        <div class="result-value" id="resWater">—</div>
+        <div class="result-unit">litros</div>
+        <div class="result-label">Agua total</div>
+      </div>
+      <div class="result-card">
+        <div class="result-icon">🍬</div>
+        <div class="result-value" id="resGels">—</div>
+        <div class="result-unit" id="resGelsUnit">geles</div>
+        <div class="result-label">Energía (25g carbs c/u)</div>
+      </div>
+      <div class="result-card">
+        <div class="result-icon">🧂</div>
+        <div class="result-value" id="resSalt">—</div>
+        <div class="result-unit" id="resSaltUnit">mg sodio</div>
+        <div class="result-label">Electrolitos totales</div>
+      </div>
+    </div>
+
+    <!-- HYDRATION PLAN -->
+    <div class="card" style="margin-top:16px">
+      <div class="plan-title">📋 Plan de carrera</div>
+      <table class="plan-table">
+        <thead>
+          <tr>
+            <th>Km</th>
+            <th>Acción</th>
+          </tr>
+        </thead>
+        <tbody id="planBody"></tbody>
+      </table>
+    </div>
+
+    <!-- ALERTS -->
+    <div class="alerts-list" id="alertsList" style="margin-top:12px"></div>
+  </div>
+
+</div>
+
+<footer>
+  NutriRun v1.0 · <a href="https://arielsavini.github.io">arielsavini.github.io</a>
+</footer>
+
+<script>
+  // ── STATE ──
+  let state = { km: 10, temp: 20, intensity: 'moderado', weight: 70 };
+
+  // ── ELEMENTS ──
+  const pills       = document.querySelectorAll('.pill');
+  const customKm    = document.getElementById('customKm');
+  const tempSlider  = document.getElementById('tempSlider');
+  const tempVal     = document.getElementById('tempVal');
+  const weightSlider= document.getElementById('weightSlider');
+  const weightVal   = document.getElementById('weightVal');
+  const intBtns     = document.querySelectorAll('.btn-intensity');
+
+  // ── DISTANCE PILLS ──
+  pills.forEach(p => {
+    p.addEventListener('click', () => {
+      pills.forEach(x => x.classList.remove('active'));
+      p.classList.add('active');
+      customKm.value = '';
+      state.km = parseFloat(p.dataset.km);
+      update();
+    });
+  });
+
+  customKm.addEventListener('input', () => {
+    const v = parseFloat(customKm.value);
+    if (v > 0) {
+      pills.forEach(x => x.classList.remove('active'));
+      state.km = v;
+      update();
+    }
+  });
+
+  // ── TEMPERATURE ──
+  tempSlider.addEventListener('input', () => {
+    state.temp = parseInt(tempSlider.value);
+    const emoji = state.temp < 10 ? '❄️' : state.temp < 20 ? '🌤️' : state.temp < 30 ? '☀️' : state.temp < 38 ? '🌶️' : '🔥';
+    tempVal.textContent = state.temp + '°C ' + emoji;
+    update();
+  });
+
+  // ── WEIGHT ──
+  weightSlider.addEventListener('input', () => {
+    state.weight = parseInt(weightSlider.value);
+    weightVal.textContent = state.weight + ' kg';
+    update();
+  });
+
+  // ── INTENSITY ──
+  intBtns.forEach(b => {
+    b.addEventListener('click', () => {
+      intBtns.forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      state.intensity = b.dataset.int;
+      update();
+    });
+  });
+
+  // ── CALCULATION ──
+  function calculate() {
+    const { km, temp, intensity, weight } = state;
+
+    // Pace (min/km)
+    const paceMap = { suave: 7.5, moderado: 5.5, intenso: 4.5 };
+    const pace = paceMap[intensity];
+    const durationH = (km * pace) / 60;
+
+    // Sweat rate (L/h)  base + temp factor + weight factor
+    const baseSweat = { suave: 0.4, moderado: 0.75, intenso: 1.15 };
+    const tempMult  = { suave: 0.018, moderado: 0.028, intenso: 0.038 };
+    let sweatRate = baseSweat[intensity] + Math.max(0, temp - 10) * tempMult[intensity];
+    sweatRate *= weight / 70;
+    sweatRate = Math.min(sweatRate, 2.5);
+
+    // Water (L) — add safety overhead
+    let water = sweatRate * durationH * 1.1;
+    water = Math.max(water, km * 0.04); // min 40ml/km
+    water = Math.round(water * 10) / 10;
+
+    // Gels (from 45+ min, ~25g carbs each)
+    const carbsPerH = { suave: 0, moderado: 30, intenso: 55 };
+    const billableH = Math.max(0, durationH - 0.75);
+    const carbs = billableH * carbsPerH[intensity];
+    const gels = Math.ceil(carbs / 25);
+
+    // Electrolytes (mg sodium)
+    const saltPerH = (temp > 25 || intensity === 'intenso') ? 700 : (durationH > 1 ? 500 : 0);
+    const saltTotal = Math.round(saltPerH * durationH / 100) * 100; // round to 100mg
+
+    // Drink frequency: every ~200ml
+    const totalMl = water * 1000;
+    const stops = Math.max(1, Math.round(totalMl / 200));
+    const kmBetweenStops = Math.max(1, Math.round(km / stops));
+
+    return { durationH, water, gels, carbs, saltTotal, kmBetweenStops, stops, sweatRate };
+  }
+
+  // ── RENDER ──
+  function update() {
+    const r = calculate();
+    const { km, temp, intensity } = state;
+
+    // Duration
+    const h = Math.floor(r.durationH);
+    const m = Math.round((r.durationH - h) * 60);
+    document.getElementById('resDuration').textContent = h > 0 ? `${h}h ${m}m` : `${m} min`;
+    document.getElementById('resDurationUnit').textContent = h > 0 ? 'horas y minutos' : 'minutos';
+
+    // Water
+    document.getElementById('resWater').textContent = r.water.toFixed(1);
+
+    // Gels
+    if (r.gels === 0) {
+      document.getElementById('resGels').textContent = '—';
+      document.getElementById('resGelsUnit').textContent = 'no necesitás';
+    } else {
+      document.getElementById('resGels').textContent = r.gels;
+      document.getElementById('resGelsUnit').textContent = r.gels === 1 ? 'gel' : 'geles';
+    }
+
+    // Salt
+    if (r.saltTotal === 0) {
+      document.getElementById('resSalt').textContent = '—';
+      document.getElementById('resSaltUnit').textContent = 'no necesitás';
+    } else {
+      document.getElementById('resSalt').textContent = r.saltTotal;
+      document.getElementById('resSaltUnit').textContent = 'mg sodio';
+    }
+
+    // Plan table
+    buildPlan(r);
+
+    // Alerts
+    buildAlerts(r);
+  }
+
+  function buildPlan(r) {
+    const { km, temp, intensity } = state;
+    const body = document.getElementById('planBody');
+    body.innerHTML = '';
+    const rows = [];
+
+    // Checkpoints every kmBetweenStops
+    for (let k = r.kmBetweenStops; k <= km; k += r.kmBetweenStops) {
+      const kRound = Math.min(Math.round(k), km);
+      const actions = [];
+      actions.push(`<span class="plan-badge badge-water">💧 ~200ml</span>`);
+
+      // Add gel at these checkpoints
+      if (r.gels > 0) {
+        const gelEvery = km / r.gels;
+        // check if a gel falls near this checkpoint (±kmBetweenStops/2)
+        for (let g = 1; g <= r.gels; g++) {
+          const gelKm = Math.round(g * gelEvery);
+          if (Math.abs(gelKm - kRound) <= Math.max(1, Math.floor(r.kmBetweenStops / 2))) {
+            actions.push(`<span class="plan-badge badge-gel">🍬 gel #${g}</span>`);
+            break;
+          }
+        }
+      }
+
+      // Add salt reminder every ~10km in hot conditions
+      if (r.saltTotal > 0 && kRound % 10 === 0 && kRound > 0) {
+        actions.push(`<span class="plan-badge badge-salt">🧂 electrolitos</span>`);
+      }
+
+      rows.push({ km: kRound, actions });
+    }
+
+    // Add start
+    rows.unshift({ km: 0, actions: [`<span class="plan-badge badge-water">💧 hidratate antes</span>`] });
+
+    // Render
+    rows.forEach(row => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><span class="plan-km">${row.km === 0 ? 'INICIO' : 'KM ' + row.km}</span></td>
+        <td class="plan-action">${row.actions.join(' ')}</td>
+      `;
+      body.appendChild(tr);
+    });
+  }
+
+  function buildAlerts(r) {
+    const { km, temp, intensity } = state;
+    const list = document.getElementById('alertsList');
+    list.innerHTML = '';
+    const alerts = [];
+
+    if (temp >= 30) {
+      alerts.push({ type: 'danger', icon: '🔥', msg: `<strong>Calor extremo (${temp}°C):</strong> Aumentá la hidratación un 20% extra y considerá llevar sales/bebida isotónica.` });
+    } else if (temp >= 25) {
+      alerts.push({ type: 'warn', icon: '☀️', msg: `<strong>Temperatura elevada:</strong> Mojate la nuca y muñecas en los puestos de agua.` });
+    }
+
+    if (r.sweatRate > 1.5) {
+      alerts.push({ type: 'warn', icon: '💦', msg: `<strong>Sudoración alta (~${r.sweatRate.toFixed(1)} L/h):</strong> No esperes a tener sed para tomar. Bebé a intervalos regulares.` });
+    }
+
+    if (km >= 21 && r.gels > 0) {
+      alerts.push({ type: 'tip', icon: '🍬', msg: `<strong>Energía:</strong> Tomá los geles con agua, nunca en seco. El primero recién a los 45 min de carrera.` });
+    }
+
+    if (km <= 10 && intensity !== 'intenso') {
+      alerts.push({ type: 'tip', icon: '✅', msg: `<strong>Distancia corta:</strong> Con una botella de 500ml alcanza. No necesitás geles para esta distancia a este ritmo.` });
+    }
+
+    if (km >= 42) {
+      alerts.push({ type: 'warn', icon: '🏁', msg: `<strong>Maratón:</strong> Practicá el plan de nutrición en los entrenamientos largos antes de la carrera. El intestino necesita entrenamiento.` });
+    }
+
+    alerts.push({ type: 'tip', icon: '🥤', msg: `Podés reemplazar parte del agua por bebida isotónica diluida (1:1) para reponer sodio y carbohidratos en forma simultánea.` });
+
+    alerts.forEach(a => {
+      const div = document.createElement('div');
+      div.className = `alert alert-${a.type}`;
+      div.innerHTML = `<span class="alert-icon">${a.icon}</span><span>${a.msg}</span>`;
+      list.appendChild(div);
+    });
+  }
+
+  // ── INIT ──
+  update();
+
+  // ── SERVICE WORKER ──
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  }
+</script>
+</body>
+</html>

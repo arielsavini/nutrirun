@@ -1,0 +1,14 @@
+{
+  "name": "NutriRun — Hidratación y Nutrición",
+  "short_name": "NutriRun",
+  "description": "Calculadora de hidratación y nutrición para corredores",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0d1117",
+  "theme_color": "#0a7c3e",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "./icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "./icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
