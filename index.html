@@ -199,41 +199,17 @@
       font-family: 'Space Mono', monospace;
     }
 
-    /* ── INTENSITY ── */
-    .intensity-row {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 8px;
-    }
-    .btn-intensity {
-      padding: 10px 6px;
-      border-radius: 10px;
-      border: 1.5px solid var(--border);
-      background: var(--surface2);
-      color: var(--muted);
-      cursor: pointer;
-      text-align: center;
-      transition: all .18s;
-    }
-    .btn-intensity .int-icon { font-size: 20px; display: block; margin-bottom: 4px; }
-    .btn-intensity .int-label {
-      font-size: 11px;
+    /* ── PACE LABEL ── */
+    .pace-tag {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 99px;
+      background: rgba(0,201,107,.15);
+      color: var(--accent2);
+      font-size: 12px;
       font-family: 'Space Mono', monospace;
-      text-transform: uppercase;
       letter-spacing: 1px;
     }
-    .btn-intensity .int-pace {
-      font-size: 10px;
-      color: var(--muted);
-      margin-top: 2px;
-    }
-    .btn-intensity:hover { border-color: var(--accent); color: var(--accent); }
-    .btn-intensity.active {
-      background: rgba(0,201,107,.15);
-      border-color: var(--accent);
-      color: var(--accent2);
-    }
-    .btn-intensity.active .int-pace { color: var(--accent); }
 
     /* ── RESULTS GRID ── */
     .results-grid {
@@ -397,22 +373,19 @@
   </div>
 
   <div class="card">
-    <div class="card-title">⚡ Intensidad</div>
-    <div class="intensity-row">
-      <div class="btn-intensity" data-int="suave">
-        <span class="int-icon">🚶</span>
-        <span class="int-label">Suave</span>
-        <div class="int-pace">~7:30 /km</div>
+    <div class="card-title">⚡ Ritmo de carrera</div>
+    <div class="slider-group">
+      <div class="slider-header">
+        <span class="slider-label"><span id="paceTag" class="pace-tag">🏃 Moderado</span></span>
+        <span class="slider-value" id="paceVal">5:30 /km</span>
       </div>
-      <div class="btn-intensity active" data-int="moderado">
-        <span class="int-icon">🏃</span>
-        <span class="int-label">Moderado</span>
-        <div class="int-pace">~5:30 /km</div>
-      </div>
-      <div class="btn-intensity" data-int="intenso">
-        <span class="int-icon">🔥</span>
-        <span class="int-label">Intenso</span>
-        <div class="int-pace">~4:30 /km</div>
+      <input type="range" id="paceSlider" min="240" max="540" value="330" step="5" />
+      <div class="slider-ticks">
+        <span>4:00 ⚡</span>
+        <span>5:00</span>
+        <span>6:30 🏃</span>
+        <span>8:00</span>
+        <span>9:00 🚶</span>
       </div>
     </div>
   </div>
@@ -492,16 +465,28 @@
 
 <script>
   // ── STATE ──
-  let state = { km: 10, temp: 20, intensity: 'moderado', weight: 70 };
+  let state = { km: 10, temp: 20, pace: 330, weight: 70 }; // pace en seg/km
+
+  // ── HELPERS ──
+  function fmtPace(sec) {
+    return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
+  }
+  function paceLabel(sec) {
+    if (sec >= 480) return '🚶 Caminata';
+    if (sec >= 390) return '🏃 Suave';
+    if (sec >= 300) return '🏃 Moderado';
+    if (sec >= 255) return '🔥 Intenso';
+    return '⚡ Competitivo';
+  }
 
   // ── ELEMENTS ──
   const pills       = document.querySelectorAll('.pill');
   const customKm    = document.getElementById('customKm');
   const tempSlider  = document.getElementById('tempSlider');
   const tempVal     = document.getElementById('tempVal');
+  const paceSlider  = document.getElementById('paceSlider');
   const weightSlider= document.getElementById('weightSlider');
   const weightVal   = document.getElementById('weightVal');
-  const intBtns     = document.querySelectorAll('.btn-intensity');
 
   // ── DISTANCE PILLS ──
   pills.forEach(p => {
@@ -538,48 +523,47 @@
     update();
   });
 
-  // ── INTENSITY ──
-  intBtns.forEach(b => {
-    b.addEventListener('click', () => {
-      intBtns.forEach(x => x.classList.remove('active'));
-      b.classList.add('active');
-      state.intensity = b.dataset.int;
-      update();
-    });
+  // ── PACE ──
+  paceSlider.addEventListener('input', () => {
+    state.pace = parseInt(paceSlider.value);
+    document.getElementById('paceVal').textContent = fmtPace(state.pace) + ' /km';
+    document.getElementById('paceTag').textContent = paceLabel(state.pace);
+    update();
   });
 
   // ── CALCULATION ──
   function calculate() {
-    const { km, temp, intensity, weight } = state;
+    const { km, temp, pace, weight } = state;
 
-    // Pace (min/km)
-    const paceMap = { suave: 7.5, moderado: 5.5, intenso: 4.5 };
-    const pace = paceMap[intensity];
-    const durationH = (km * pace) / 60;
+    // pace = segundos/km. Factor 0 (lento 9:00) → 1 (rápido 4:00)
+    const factor = (540 - pace) / 300;
 
-    // Sweat rate (L/h)  base + temp factor + weight factor
-    const baseSweat = { suave: 0.4, moderado: 0.75, intenso: 1.15 };
-    const tempMult  = { suave: 0.018, moderado: 0.028, intenso: 0.038 };
-    let sweatRate = baseSweat[intensity] + Math.max(0, temp - 10) * tempMult[intensity];
+    // Duración en horas
+    const durationH = (km * pace) / 3600;
+
+    // Sweat rate (L/h): 0.4 (slow) → 1.15 (fast) + ajuste temperatura + peso
+    let sweatRate = 0.4 + factor * 0.75;
+    const tMult = 0.018 + factor * 0.020;
+    sweatRate += Math.max(0, temp - 10) * tMult;
     sweatRate *= weight / 70;
     sweatRate = Math.min(sweatRate, 2.5);
 
-    // Water (L) — add safety overhead
+    // Water (L)
     let water = sweatRate * durationH * 1.1;
-    water = Math.max(water, km * 0.04); // min 40ml/km
+    water = Math.max(water, km * 0.04);
     water = Math.round(water * 10) / 10;
 
-    // Gels (from 45+ min, ~25g carbs each)
-    const carbsPerH = { suave: 0, moderado: 30, intenso: 55 };
+    // Gels: 0 g/h por encima de 7:30/km (450s), 55 g/h por debajo de 5:00/km (300s)
+    const carbsPerH = pace >= 450 ? 0 : pace <= 300 ? 55 : (450 - pace) / 150 * 55;
     const billableH = Math.max(0, durationH - 0.75);
-    const carbs = billableH * carbsPerH[intensity];
+    const carbs = billableH * carbsPerH;
     const gels = Math.ceil(carbs / 25);
 
-    // Electrolytes (mg sodium)
-    const saltPerH = (temp > 25 || intensity === 'intenso') ? 700 : (durationH > 1 ? 500 : 0);
-    const saltTotal = Math.round(saltPerH * durationH / 100) * 100; // round to 100mg
+    // Electrolitos (mg sodio): ritmo < 5:30/km o calor = alta transpiración
+    const saltPerH = (temp > 25 || pace <= 330) ? 700 : (durationH > 1 ? 500 : 0);
+    const saltTotal = Math.round(saltPerH * durationH / 100) * 100;
 
-    // Drink frequency: every ~200ml
+    // Plan de hidratación
     const totalMl = water * 1000;
     const stops = Math.max(1, Math.round(totalMl / 200));
     const kmBetweenStops = Math.max(1, Math.round(km / stops));
@@ -590,7 +574,7 @@
   // ── RENDER ──
   function update() {
     const r = calculate();
-    const { km, temp, intensity } = state;
+    const { km, temp, pace } = state;
 
     // Duration
     const h = Math.floor(r.durationH);
@@ -627,7 +611,7 @@
   }
 
   function buildPlan(r) {
-    const { km, temp, intensity } = state;
+    const { km, temp, pace } = state;
     const body = document.getElementById('planBody');
     body.innerHTML = '';
     const rows = [];
@@ -674,7 +658,7 @@
   }
 
   function buildAlerts(r) {
-    const { km, temp, intensity } = state;
+    const { km, temp, pace } = state;
     const list = document.getElementById('alertsList');
     list.innerHTML = '';
     const alerts = [];
@@ -693,7 +677,7 @@
       alerts.push({ type: 'tip', icon: '🍬', msg: `<strong>Energía:</strong> Tomá los geles con agua, nunca en seco. El primero recién a los 45 min de carrera.` });
     }
 
-    if (km <= 10 && intensity !== 'intenso') {
+    if (km <= 10 && pace > 300) {
       alerts.push({ type: 'tip', icon: '✅', msg: `<strong>Distancia corta:</strong> Con una botella de 500ml alcanza. No necesitás geles para esta distancia a este ritmo.` });
     }
 
