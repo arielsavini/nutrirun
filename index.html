@@ -211,6 +211,100 @@
       letter-spacing: 1px;
     }
 
+    /* ── CITY SEARCH ── */
+    .city-search-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .city-search-row input {
+      flex: 1;
+      padding: 9px 12px;
+      border-radius: 8px;
+      border: 1.5px solid var(--border);
+      background: var(--surface2);
+      color: var(--text);
+      font-size: 14px;
+      font-family: 'Inter', sans-serif;
+      outline: none;
+      transition: border-color .15s;
+    }
+    .city-search-row input:focus { border-color: var(--accent); }
+    .city-search-row input::placeholder { color: var(--muted); }
+    .city-search-btn {
+      padding: 9px 14px;
+      border-radius: 8px;
+      border: none;
+      background: var(--accent);
+      color: #000;
+      font-size: 15px;
+      cursor: pointer;
+      font-weight: 700;
+      transition: opacity .15s;
+      white-space: nowrap;
+    }
+    .city-search-btn:hover { opacity: .85; }
+    .city-search-btn:disabled { opacity: .5; cursor: default; }
+    .city-status {
+      font-size: 11px;
+      color: var(--muted);
+      font-family: 'Space Mono', monospace;
+      min-height: 16px;
+      margin-bottom: 10px;
+    }
+    .city-status.ok  { color: var(--accent); }
+    .city-status.err { color: var(--danger); }
+
+    /* ── FORECAST STRIP ── */
+    .forecast-strip {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+      margin-bottom: 14px;
+      scrollbar-width: none;
+    }
+    .forecast-strip::-webkit-scrollbar { display: none; }
+    .forecast-day {
+      flex: 1;
+      min-width: 54px;
+      padding: 10px 4px 8px;
+      border-radius: 10px;
+      border: 1.5px solid var(--border);
+      background: var(--surface2);
+      text-align: center;
+      cursor: pointer;
+      transition: all .18s;
+    }
+    .forecast-day:hover { border-color: var(--accent); }
+    .forecast-day.fc-active {
+      border-color: var(--accent);
+      background: rgba(0,201,107,.15);
+    }
+    .fc-day-name {
+      font-size: 10px;
+      color: var(--muted);
+      font-family: 'Space Mono', monospace;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .forecast-day.fc-active .fc-day-name { color: var(--accent); }
+    .fc-icon { font-size: 22px; margin: 4px 0; }
+    .fc-temp {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 20px;
+      color: var(--accent2);
+      letter-spacing: 1px;
+    }
+    .temp-manual-label {
+      font-size: 10px;
+      color: var(--muted);
+      font-family: 'Space Mono', monospace;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+
     /* ── RESULTS GRID ── */
     .results-grid {
       display: grid;
@@ -355,7 +449,20 @@
   </div>
 
   <div class="card">
-    <div class="card-title">🌡️ Temperatura estimada</div>
+    <div class="card-title">🌡️ Temperatura</div>
+
+    <!-- Búsqueda de ciudad -->
+    <div class="city-search-row">
+      <input type="text" id="cityInput" placeholder="Buscar ciudad… (ej: Mendoza)" autocomplete="off" />
+      <button class="city-search-btn" id="citySearchBtn">🔍 Buscar</button>
+    </div>
+    <div class="city-status" id="cityStatus"></div>
+
+    <!-- Pronóstico 5 días (oculto hasta buscar) -->
+    <div class="forecast-strip" id="forecastStrip" style="display:none"></div>
+
+    <!-- Slider manual -->
+    <div class="temp-manual-label" id="tempManualLabel">💧 Ajustá manualmente</div>
     <div class="slider-group">
       <div class="slider-header">
         <span class="slider-label">Temperatura ambiente</span>
@@ -509,12 +616,90 @@
   });
 
   // ── TEMPERATURE ──
-  tempSlider.addEventListener('input', () => {
-    state.temp = parseInt(tempSlider.value);
-    const emoji = state.temp < 10 ? '❄️' : state.temp < 20 ? '🌤️' : state.temp < 30 ? '☀️' : state.temp < 38 ? '🌶️' : '🔥';
-    tempVal.textContent = state.temp + '°C ' + emoji;
+  function setTemp(val, fromForecast = false) {
+    const t = Math.max(5, Math.min(45, Math.round(val)));
+    state.temp = t;
+    tempSlider.value = t;
+    const emoji = t < 10 ? '❄️' : t < 20 ? '🌤️' : t < 30 ? '☀️' : t < 38 ? '🌶️' : '🔥';
+    document.getElementById('tempVal').textContent = t + '°C ' + emoji;
+    if (!fromForecast) {
+      // deselect forecast active on manual drag
+      document.querySelectorAll('.forecast-day').forEach(c => c.classList.remove('fc-active'));
+    }
     update();
-  });
+  }
+
+  tempSlider.addEventListener('input', () => setTemp(parseInt(tempSlider.value), false));
+
+  // ── WEATHER (Open-Meteo, sin API key) ──
+  const WMO_EMOJI = { 0:'☀️', 1:'🌤️', 2:'⛅', 3:'☁️', 45:'🌫️', 48:'🌫️', 51:'🌦️', 53:'🌦️', 55:'🌦️', 61:'🌧️', 63:'🌧️', 65:'🌧️', 71:'🌨️', 73:'🌨️', 75:'🌨️', 77:'🌨️', 80:'🌧️', 81:'🌧️', 82:'⛈️', 85:'🌨️', 86:'🌨️', 95:'⛈️', 96:'⛈️', 99:'⛈️' };
+  function wmoEmoji(code) {
+    return WMO_EMOJI[code] || (code <= 3 ? '⛅' : code <= 48 ? '🌫️' : code <= 67 ? '🌧️' : code <= 77 ? '🌨️' : '⛈️');
+  }
+
+  const DAY_NAMES = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+
+  async function loadForecast(lat, lon) {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=temperature_2m_max,weathercode&timezone=auto&forecast_days=5`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('forecast error');
+    const data = await res.json();
+    const { time, temperature_2m_max, weathercode } = data.daily;
+    const strip = document.getElementById('forecastStrip');
+    strip.innerHTML = '';
+    strip.style.display = 'flex';
+    document.getElementById('tempManualLabel').textContent = '💧 O ajustá manualmente';
+    const todayStr = new Date().toISOString().split('T')[0];
+    time.forEach((date, i) => {
+      const d = new Date(date + 'T12:00:00');
+      const label = date === todayStr ? 'Hoy' : i === 1 ? 'Mañ' : DAY_NAMES[d.getDay()];
+      const temp = Math.round(temperature_2m_max[i]);
+      const card = document.createElement('div');
+      card.className = 'forecast-day' + (i === 0 ? ' fc-active' : '');
+      card.dataset.temp = temp;
+      card.innerHTML = `<div class="fc-day-name">${label}</div><div class="fc-icon">${wmoEmoji(weathercode[i])}</div><div class="fc-temp">${temp}°</div>`;
+      card.addEventListener('click', () => {
+        document.querySelectorAll('.forecast-day').forEach(c => c.classList.remove('fc-active'));
+        card.classList.add('fc-active');
+        setTemp(temp, true);
+      });
+      strip.appendChild(card);
+    });
+    setTemp(Math.round(temperature_2m_max[0]), true);
+  }
+
+  async function searchCity() {
+    const query = document.getElementById('cityInput').value.trim();
+    if (!query) return;
+    const btn = document.getElementById('citySearchBtn');
+    const status = document.getElementById('cityStatus');
+    btn.disabled = true;
+    btn.textContent = '⏳ Buscando…';
+    status.className = 'city-status';
+    status.textContent = '';
+    try {
+      const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=1&language=es`);
+      const geoData = await geoRes.json();
+      if (!geoData.results?.length) {
+        status.className = 'city-status err';
+        status.textContent = '⚠️ Ciudad no encontrada';
+        return;
+      }
+      const { latitude, longitude, name, country, admin1 } = geoData.results[0];
+      status.className = 'city-status ok';
+      status.textContent = `📍 ${name}${admin1 ? ', ' + admin1 : ''}, ${country}`;
+      await loadForecast(latitude, longitude);
+    } catch (e) {
+      status.className = 'city-status err';
+      status.textContent = '⚠️ Error de conexión';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '🔍 Buscar';
+    }
+  }
+
+  document.getElementById('citySearchBtn').addEventListener('click', searchCity);
+  document.getElementById('cityInput').addEventListener('keydown', e => { if (e.key === 'Enter') searchCity(); });
 
   // ── WEIGHT ──
   weightSlider.addEventListener('input', () => {
