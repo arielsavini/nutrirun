@@ -529,7 +529,7 @@
       <div class="result-card highlight">
         <div class="result-icon">💧</div>
         <div class="result-value" id="resWater">—</div>
-        <div class="result-unit">litros</div>
+        <div class="result-unit" id="resWaterUnit">litros</div>
         <div class="result-label">Agua total</div>
       </div>
       <div class="result-card">
@@ -580,10 +580,10 @@
   }
   function paceLabel(sec) {
     if (sec >= 480) return '🚶 Caminata';
-    if (sec >= 390) return '🏃 Suave';
-    if (sec >= 300) return '🏃 Moderado';
-    if (sec >= 255) return '🔥 Intenso';
-    return '⚡ Competitivo';
+    if (sec >= 360) return '🏃 Suave';      // >6:00/km
+    if (sec >= 300) return '🏃 Moderado';   // 5:00–6:00/km
+    if (sec >= 240) return '🔥 Intenso';    // 4:00–5:00/km
+    return '⚡ Competitivo';               // <4:00/km
   }
 
   // ── ELEMENTS ──
@@ -717,44 +717,85 @@
   });
 
   // ── CALCULATION ──
+  // Fuente: tabla fisiológica de hidratación/nutrición para running
   function calculate() {
     const { km, temp, pace, weight } = state;
 
-    // pace = segundos/km. Factor 0 (lento 9:00) → 1 (rápido 4:00)
-    const factor = (540 - pace) / 300;
-
     // Duración en horas
     const durationH = (km * pace) / 3600;
+    const raceMin = durationH * 60;
 
-    // Sweat rate (L/h): 0.4 (slow) → 1.15 (fast) + ajuste temperatura + peso
-    let sweatRate = 0.4 + factor * 0.75;
-    const tMult = 0.018 + factor * 0.020;
-    sweatRate += Math.max(0, temp - 10) * tMult;
-    sweatRate *= weight / 70;
-    sweatRate = Math.min(sweatRate, 2.5);
+    // ── HIDRATACIÓN: peso × k (ml/h), k = 6–12 ──
+    // Temperatura: <15°C → k_t=0, 15-25°C → k_t=2, >25°C → k_t=4
+    // Intensidad:  >6:00 → k_p=0, 5-6:00 → k_p=1, <5:00 → k_p=2
+    const k_t = temp < 15 ? 0 : temp <= 25 ? 2 : 4;
+    const k_p = pace > 360 ? 0 : pace >= 300 ? 1 : 2;
+    const k = Math.min(12, 6 + k_t + k_p);       // 6–12
+    const hydRateMLh = weight * k;                 // ml/h
 
-    // Water (L)
-    let water = sweatRate * durationH * 1.1;
-    water = Math.max(water, km * 0.04);
+    // Agua total (L) con 10% buffer de pre-hidratación
+    let water = (hydRateMLh * durationH / 1000) * 1.1;
+
+    // Mínimos por distancia (tabla de recomendación)
+    if      (km >= 42) water = Math.max(water, 2.0);
+    else if (km >= 21) water = Math.max(water, 0.5);
+    else if (km >= 15) water = Math.max(water, 0.4);
+    else if (km >= 10) water = Math.max(water, 0.3);
+
     water = Math.round(water * 10) / 10;
+    water = Math.max(water, 0.2);
 
-    // Gels: 0 g/h por encima de 7:30/km (450s), 55 g/h por debajo de 5:00/km (300s)
-    const carbsPerH = pace >= 450 ? 0 : pace <= 300 ? 55 : (450 - pace) / 150 * 55;
-    const billableH = Math.max(0, durationH - 0.75);
-    const carbs = billableH * carbsPerH;
-    const gels = Math.ceil(carbs / 25);
+    // ── CARBOHIDRATOS Y GELES ──
+    // g/h según ritmo (tabla de ritmo estimado):
+    //  >6:00/km (>360s) = 30 g/h  — intensidad baja
+    //  5:00–6:00 (300-360s) = 50 g/h — moderada
+    //  4:00–5:00 (240-300s) = 67 g/h — alta
+    //  <4:00 (<240s) = 82 g/h         — muy alta
+    const carbsPerH = pace > 360 ? 30 :
+                      pace >= 300 ? 50 :
+                      pace >= 240 ? 67 : 82;
 
-    // Electrolitos (mg sodio): ritmo < 5:30/km o calor = alta transpiración
-    const saltPerH = (temp > 25 || pace <= 330) ? 700 : (durationH > 1 ? 500 : 0);
+    // Primer gel a los 40 min; contar tiempo efectivo hasta el final
+    const firstGelMin = 40;
+    const countableMin = Math.max(0, raceMin - firstGelMin);
+    const totalCarbs = (countableMin / 60) * carbsPerH;
+
+    let gels = 0;
+    if (km > 5) {
+      gels = Math.ceil(totalCarbs / 25);
+      if (km <= 10) gels = Math.min(1, gels); // máx 1 gel en 10K
+    }
+
+    // Intervalo entre geles (min) — según la tabla
+    let gelIntervalMin = 0;
+    if (gels > 0) {
+      gelIntervalMin = pace > 360 ? 55 :  // suave: cada 50-60 min
+                       pace >= 300 ? 45 :  // moderado: cada 40-45 min
+                       pace >= 240 ? 38 :  // intenso: cada 35-40 min
+                       32;                 // muy intenso: cada 30-35 min
+    }
+
+    // ── SODIO / ELECTROLITOS ──
+    // Necesario cuando: temp >= 22°C O duración > 90 min
+    // Objetivo: 300–700 mg/h
+    let saltPerH = 0;
+    if (temp >= 22 || durationH > 1.5) {
+      saltPerH = (temp >= 25 && durationH > 1.5) ? 700 :
+                 (temp >= 22 || durationH > 1.5)  ? 500 : 300;
+    }
     const saltTotal = Math.round(saltPerH * durationH / 100) * 100;
 
-    // Plan de hidratación
-    const totalMl = water * 1000;
+    // ── PLAN ──
+    const totalMl = Math.round(water * 1000);
     const stops = Math.max(1, Math.round(totalMl / 200));
     const kmBetweenStops = Math.max(1, Math.round(km / stops));
     const mlPerStop = Math.round(totalMl / stops / 25) * 25;
 
-    return { durationH, water, gels, carbs, saltTotal, kmBetweenStops, stops, sweatRate, mlPerStop };
+    return {
+      durationH, water, gels, carbs: totalCarbs, saltTotal,
+      kmBetweenStops, stops, sweatRate: hydRateMLh / 1000,
+      mlPerStop, carbsPerH, gelIntervalMin
+    };
   }
 
   // ── RENDER ──
@@ -770,6 +811,7 @@
 
     // Water
     document.getElementById('resWater').textContent = r.water.toFixed(1);
+    document.getElementById('resWaterUnit').textContent = `litros (~${Math.round(r.sweatRate * 1000)} ml/h)`;
 
     // Gels
     if (r.gels === 0) {
@@ -777,7 +819,8 @@
       document.getElementById('resGelsUnit').textContent = 'no necesitás';
     } else {
       document.getElementById('resGels').textContent = r.gels;
-      document.getElementById('resGelsUnit').textContent = r.gels === 1 ? 'gel' : 'geles';
+      document.getElementById('resGelsUnit').textContent =
+        r.gels === 1 ? `gel (c/${r.gelIntervalMin}min)` : `geles (c/${r.gelIntervalMin}min)`;
     }
 
     // Salt
@@ -797,31 +840,39 @@
   }
 
   function buildPlan(r) {
-    const { km, temp, pace } = state;
+    const { km, pace } = state;
     const body = document.getElementById('planBody');
     body.innerHTML = '';
-    const rows = [];
 
-    // Checkpoints every kmBetweenStops
+    // Posiciones de geles basadas en tiempo (primer gel a los 40 min,
+    // luego cada gelIntervalMin) — convertidas a km según el ritmo
+    const gelPositions = [];
+    if (r.gels > 0 && r.gelIntervalMin > 0) {
+      for (let g = 0; g < r.gels; g++) {
+        const minIntoRace = 40 + g * r.gelIntervalMin;
+        const gkm = Math.min(km - 1, Math.round((minIntoRace * 60) / pace));
+        if (gkm > 0) gelPositions.push({ km: gkm, used: false, idx: g + 1 });
+      }
+    }
+
+    const rows = [];
+    rows.push({ km: 0, actions: [`<span class="plan-badge badge-water">💧 hidratate antes</span>`] });
+
     for (let k = r.kmBetweenStops; k <= km; k += r.kmBetweenStops) {
       const kRound = Math.min(Math.round(k), km);
       const actions = [];
       actions.push(`<span class="plan-badge badge-water">💧 ~${r.mlPerStop}ml</span>`);
 
-      // Add gel at these checkpoints
-      if (r.gels > 0) {
-        const gelEvery = km / r.gels;
-        // check if a gel falls near this checkpoint (±kmBetweenStops/2)
-        for (let g = 1; g <= r.gels; g++) {
-          const gelKm = Math.round(g * gelEvery);
-          if (Math.abs(gelKm - kRound) <= Math.max(1, Math.floor(r.kmBetweenStops / 2))) {
-            actions.push(`<span class="plan-badge badge-gel">🍬 gel #${g}</span>`);
-            break;
-          }
+      // Gel cercano a este puesto de agua?
+      const halfStop = Math.max(1, Math.floor(r.kmBetweenStops / 2));
+      for (const gp of gelPositions) {
+        if (!gp.used && Math.abs(gp.km - kRound) <= halfStop) {
+          actions.push(`<span class="plan-badge badge-gel">🍬 gel #${gp.idx}</span>`);
+          gp.used = true;
+          break;
         }
       }
 
-      // Add salt reminder every ~10km in hot conditions
       if (r.saltTotal > 0 && kRound % 10 === 0 && kRound > 0) {
         actions.push(`<span class="plan-badge badge-salt">🧂 electrolitos</span>`);
       }
@@ -829,10 +880,15 @@
       rows.push({ km: kRound, actions });
     }
 
-    // Add start
-    rows.unshift({ km: 0, actions: [`<span class="plan-badge badge-water">💧 hidratate antes</span>`] });
+    // Geles que no cayeron cerca de un puesto → fila propia
+    for (const gp of gelPositions) {
+      if (!gp.used) {
+        rows.push({ km: gp.km, actions: [`<span class="plan-badge badge-gel">🍬 gel #${gp.idx}</span>`] });
+      }
+    }
 
-    // Render
+    rows.sort((a, b) => a.km - b.km);
+
     rows.forEach(row => {
       const tr = document.createElement('tr');
       tr.innerHTML = `
@@ -849,35 +905,64 @@
     list.innerHTML = '';
     const alerts = [];
 
+    // ── Temperatura ──
     if (temp >= 30) {
-      alerts.push({ type: 'danger', icon: '🔥', msg: `<strong>Calor extremo (${temp}°C):</strong> Aumentá la hidratación un 20% extra y considerá llevar sales/bebida isotónica.` });
-    } else if (temp >= 25) {
-      alerts.push({ type: 'warn', icon: '☀️', msg: `<strong>Temperatura elevada:</strong> Mojate la nuca y muñecas en los puestos de agua.` });
+      alerts.push({ type: 'danger', icon: '🔥', msg:
+        `<strong>Calor extremo (${temp}°C):</strong> Bebé un 20% más de lo calculado. Electrolitos obligatorios (300–700 mg sodio/h). Mojate la nuca y muñecas en cada puesto.` });
+    } else if (temp >= 22) {
+      alerts.push({ type: 'warn', icon: '☀️', msg:
+        `<strong>Temperatura elevada (${temp}°C):</strong> Activás la pérdida de sodio. Agregá sales o isotónica cada 10 km (objetivo ~500 mg Na/h).` });
     }
 
-    if (r.sweatRate > 1.5) {
-      alerts.push({ type: 'warn', icon: '💦', msg: `<strong>Sudoración alta (~${r.sweatRate.toFixed(1)} L/h):</strong> No esperes a tener sed para tomar. Bebé a intervalos regulares.` });
+    // ── Sudoración ──
+    if (r.sweatRate > 0.85) {
+      const mlH = Math.round(r.sweatRate * 1000);
+      alerts.push({ type: 'warn', icon: '💦', msg:
+        `<strong>Sudoración alta (~${mlH} ml/h):</strong> Bebé antes de tener sed. Cada ${r.kmBetweenStops} km tomá ~${r.mlPerStop} ml, sin exceder los 800 ml/h si no estás acostumbrado.` });
     }
 
-    if (km >= 21 && r.gels > 0) {
-      alerts.push({ type: 'tip', icon: '🍬', msg: `<strong>Energía:</strong> Tomá los geles con agua, nunca en seco. El primero recién a los 45 min de carrera.` });
-    }
-
-    if (km <= 10) {
-      const mlTotal = Math.round(r.water * 1000);
-      if (r.water <= 0.5) {
-        alerts.push({ type: 'tip', icon: '✅', msg: `<strong>Distancia corta:</strong> Con una botella de 500ml alcanza. No necesitás geles para esta distancia.` });
+    // ── Geles ──
+    if (r.gels > 0) {
+      if (km <= 10) {
+        alerts.push({ type: 'tip', icon: '🍬', msg:
+          `<strong>10K a ritmo intenso:</strong> Si la carrera dura más de 45 min, considerá 1 gel antes de la largada. No es necesario durante la carrera.` });
       } else {
-        const nBotellas = Math.ceil(r.water / 0.5);
-        alerts.push({ type: 'tip', icon: '💧', msg: `<strong>Distancia corta:</strong> Necesitás unos ${mlTotal}ml en total (${nBotellas} botella${nBotellas > 1 ? 's' : ''} de 500ml). Usá los puestos de agua cada ${r.kmBetweenStops} km.` });
+        alerts.push({ type: 'tip', icon: '🍬', msg:
+          `<strong>Geles cada ~${r.gelIntervalMin} min:</strong> Primer gel a los 40 min de carrera. Tomá siempre con agua (no en seco → molestias digestivas). No probés geles nuevos en competencia.` });
       }
     }
 
-    if (km >= 42) {
-      alerts.push({ type: 'warn', icon: '🏁', msg: `<strong>Maratón:</strong> Practicá el plan de nutrición en los entrenamientos largos antes de la carrera. El intestino necesita entrenamiento.` });
+    // ── Distancia corta ──
+    if (km <= 10 && r.gels === 0) {
+      const mlTotal = Math.round(r.water * 1000);
+      const nBotellas = Math.ceil(r.water / 0.5);
+      alerts.push({ type: 'tip', icon: '✅', msg:
+        km <= 5
+          ? `<strong>5K:</strong> Hidratate bien antes de la carrera. Sin agua ni geles durante la prueba.`
+          : `<strong>10K:</strong> Con ~${mlTotal} ml es suficiente (${nBotellas} botella${nBotellas > 1 ? 's' : ''} de 500 ml). Usá los puestos cada ${r.kmBetweenStops} km.` });
     }
 
-    alerts.push({ type: 'tip', icon: '🥤', msg: `Podés reemplazar parte del agua por bebida isotónica diluida (1:1) para reponer sodio y carbohidratos en forma simultánea.` });
+    // ── Maratón / Ultra ──
+    if (km >= 42) {
+      alerts.push({ type: 'warn', icon: '🏁', msg:
+        `<strong>Maratón:</strong> El intestino necesita entrenamiento para absorber geles corriendo. Practicá el plan exacto en tus fondos largos previos. Apuntá a 60–90 g de carbohidratos por hora con mezcla glucosa/fructosa.` });
+    } else if (km >= 30) {
+      alerts.push({ type: 'warn', icon: '⚠️', msg:
+        `<strong>30K+:</strong> Vigilá los calambres — señal de déficit de sodio. Incluí sales o isotónica desde los primeros 10 km.` });
+    }
+
+    // ── Duración > 90 min → sodio ──
+    if (r.saltTotal > 0 && temp < 22 && km < 30) {
+      const saltH = Math.round(r.saltTotal / r.durationH / 100) * 100;
+      alerts.push({ type: 'tip', icon: '🧂', msg:
+        `<strong>Duración > 90 min:</strong> Empezás a necesitar sodio (~${saltH} mg/h). Bebida isotónica 1:1 o tabletas de sales cada 10 km.` });
+    }
+
+    // ── Isotónica ──
+    if (r.sweatRate <= 0.85 && temp < 22) {
+      alerts.push({ type: 'tip', icon: '🥤', msg:
+        `Podés reemplazar parte del agua por bebida isotónica diluida (1:1) para reponer sodio y carbohidratos simultáneamente.` });
+    }
 
     alerts.forEach(a => {
       const div = document.createElement('div');
