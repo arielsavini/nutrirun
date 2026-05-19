@@ -752,8 +752,9 @@
     const totalMl = water * 1000;
     const stops = Math.max(1, Math.round(totalMl / 200));
     const kmBetweenStops = Math.max(1, Math.round(km / stops));
+    const mlPerStop = Math.round(totalMl / stops / 25) * 25;
 
-    return { durationH, water, gels, carbs, saltTotal, kmBetweenStops, stops, sweatRate };
+    return { durationH, water, gels, carbs, saltTotal, kmBetweenStops, stops, sweatRate, mlPerStop };
   }
 
   // ── RENDER ──
@@ -805,7 +806,7 @@
     for (let k = r.kmBetweenStops; k <= km; k += r.kmBetweenStops) {
       const kRound = Math.min(Math.round(k), km);
       const actions = [];
-      actions.push(`<span class="plan-badge badge-water">💧 ~200ml</span>`);
+      actions.push(`<span class="plan-badge badge-water">💧 ~${r.mlPerStop}ml</span>`);
 
       // Add gel at these checkpoints
       if (r.gels > 0) {
@@ -862,8 +863,14 @@
       alerts.push({ type: 'tip', icon: '🍬', msg: `<strong>Energía:</strong> Tomá los geles con agua, nunca en seco. El primero recién a los 45 min de carrera.` });
     }
 
-    if (km <= 10 && pace > 300) {
-      alerts.push({ type: 'tip', icon: '✅', msg: `<strong>Distancia corta:</strong> Con una botella de 500ml alcanza. No necesitás geles para esta distancia a este ritmo.` });
+    if (km <= 10) {
+      const mlTotal = Math.round(r.water * 1000);
+      if (r.water <= 0.5) {
+        alerts.push({ type: 'tip', icon: '✅', msg: `<strong>Distancia corta:</strong> Con una botella de 500ml alcanza. No necesitás geles para esta distancia.` });
+      } else {
+        const nBotellas = Math.ceil(r.water / 0.5);
+        alerts.push({ type: 'tip', icon: '💧', msg: `<strong>Distancia corta:</strong> Necesitás unos ${mlTotal}ml en total (${nBotellas} botella${nBotellas > 1 ? 's' : ''} de 500ml). Usá los puestos de agua cada ${r.kmBetweenStops} km.` });
+      }
     }
 
     if (km >= 42) {
